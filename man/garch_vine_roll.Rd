@@ -8,6 +8,7 @@ garch_vine_roll(
   data = NULL,
   garch.settings = NULL,
   vine.settings = NULL,
+  alpha = c(0.01, 0.05),
   weights = NULL
 )
 }
@@ -17,6 +18,8 @@ garch_vine_roll(
 \item{garch.settings}{A \code{\linkS4class{GarchSettings}} object specifying the settings for the ARMA-GARCH models.}
 
 \item{vine.settings}{A \code{\linkS4class{VineSettings}} object specifying the settings for the vine copula model.}
+
+\item{alpha}{The Value-at-Risk level to calculate.}
 
 \item{weights}{A numerical vector specifying the weights of the portfolio components. If ommitted an equally weighted portfolio is assumed.}
 }

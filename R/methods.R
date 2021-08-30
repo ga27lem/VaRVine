@@ -32,6 +32,7 @@ vine_settings <- function(train.size=250, refit.every=25, family.set='all') {
 #' @param data A matrix or data.frame where each column corresponds to the sorted log return series of a single stock. The row names are idially dates.
 #' @param garch.settings A \code{\linkS4class{GarchSettings}} object specifying the settings for the ARMA-GARCH models.
 #' @param vine.settings A \code{\linkS4class{VineSettings}} object specifying the settings for the vine copula model.
+#' @param alpha The Value-at-Risk level to calculate.
 #' @param weights A numerical vector specifying the weights of the portfolio components. If ommitted an equally weighted portfolio is assumed.
 #' @import rvinecopulib
 #' @import rugarch
@@ -39,7 +40,7 @@ vine_settings <- function(train.size=250, refit.every=25, family.set='all') {
 #' @import data.table
 #' @import dplyr
 #' @export
-garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = NULL, weights=NULL) {
+garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = NULL, alpha = c(0.01, 0.05), weights=NULL) {
   UseMethod("garch_vine_roll")
 }
 
@@ -54,7 +55,11 @@ garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = 
   new("VineSettings", train.size = train.size, refit.every = refit.every, family.set = family.set)
 }
 
-.garch_vine_roll <-  function(data = NULL, garch.settings = NULL, vine.settings = NULL, weights = NULL) {
+.garch_vine_roll <-  function(data = NULL,
+                              garch.settings = NULL,
+                              vine.settings = NULL,
+                              alpha = c(0.01, 0.05),
+                              weights = NULL) {
 
   n <- garch.settings@train.size
   m <- garch.settings@refit.every
@@ -65,16 +70,16 @@ garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = 
   dt <- data %>% as.data.table(keep.rownames = 'date') %>% melt(id.vars = c('date'), variable.name = 'ticker', value.name = 'ret.closing.prices')
 
 
-  garch_vine_roll <- new("GarchVineRoll")
-  garch_vine_roll@garch.settings <- garch.settings
-  garch_vine_roll@vine.settings <- vine.settings
+  garch.vine.roll <- new("GarchVineRoll")
+  garch.vine.roll@garch.settings <- garch.settings
+  garch.vine.roll@vine.settings <- vine.settings
 
-  garch_vine_roll@garch.rolls <- list()
+  garch.vine.roll@garch.rolls <- list()
 
   tickers <- dt$ticker %>% as.character %>%  unique
 
   weights <- .initialize_weights(tickers = tickers, weights = weights)
-  garch_vine_roll@weights <- weights
+  garch.vine.roll@weights <- weights
   garch.settings@specs <- .initialize_specs(tickers, garch.settings@specs)
 
   realized_portfolio_returns <- data.table(date = as.POSIXct(rownames(data)), realized = rowSums(as.data.table(t(t(as.matrix(data)) * weights))))
@@ -95,15 +100,15 @@ garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = 
   })
   names(garch_rolls) <- tickers
 
-  garch_vine_roll@garch.rolls <- garch_rolls
+  garch.vine.roll@garch.rolls <- garch_rolls
 
   cat('\n')
-  garchForecasts <- lapply(garch_rolls, function(roll) {
+  garch_forecasts <- lapply(garch_rolls, function(roll) {
     ans <- roll@forecast$density %>% as.data.table(keep.rownames = 'date')
     ans <- ans[, .(date, Mu, Sigma, Realized, Shape, Skew)]
   })
-  numberOfWindows <- garch_rolls[[tickers[1]]]@model$n.refits
-  residualsPerWindow <- lapply(1:numberOfWindows, function(i) {
+  number_of_windows <- garch_rolls[[tickers[1]]]@model$n.refits
+  residuals_per_window <- lapply(1:number_of_windows, function(i) {
     # print(i)
     lapply(tickers, function(.ticker) {
       # print(.ticker)
@@ -116,21 +121,21 @@ garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = 
       end <- start + (n - 1) + m
       r <- r[start:end]
       mod <- ugarchfilter(spec, data = r, out.sample = m)
-      fittedResiduals <- residuals(mod, standardize = T) %>% as.data.table
-      colnames(fittedResiduals) <- c('date', 'z')
-      fittedResiduals[, Mu := NA]
-      fittedResiduals[, Sigma := NA]
+      fitted_residuals <- residuals(mod, standardize = T) %>% as.data.table
+      colnames(fitted_residuals) <- c('date', 'z')
+      fitted_residuals[, Mu := NA]
+      fitted_residuals[, Sigma := NA]
       shape <- .coefficients['shape']
       skew <- .coefficients['skew']
-      fittedResiduals[, Shape := shape]
-      fittedResiduals[, Skew := skew]
-      forecastStart <- start
-      forecastEnd <- start + m - 1
-      forecastedResiduals <- garchForecasts[[.ticker]] %>%
-        .[forecastStart:forecastEnd] %>%
+      fitted_residuals[, Shape := shape]
+      fitted_residuals[, Skew := skew]
+      forecast_start <- start
+      forecast_end <- start + m - 1
+      forecasted_residuals <- garch_forecasts[[.ticker]] %>%
+        .[forecast_start:forecast_end] %>%
         .[, .(date = as.POSIXct(date),
               z = (Realized - Mu) / Sigma, Mu, Sigma, Shape, Skew)]
-      ans <- rbind(fittedResiduals, forecastedResiduals)
+      ans <- rbind(fitted_residuals, forecasted_residuals)
       colnames(ans) <- colnames(ans) %>% tolower()
       ans[, ticker := .ticker]
       ans[, window_index := i]
@@ -140,87 +145,88 @@ garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = 
 
 
   iter <- 1
-  garch_vine_roll@vines <- list()
-  prevWindowIndex <- -1
-  numberOfObservations <- dt[ticker == tickers[[1]]] %>% nrow
-  valueAtRiskForecast <- data.table()
-  for (end in seq(n, numberOfObservations - 1, by = q)) {
-    # valueAtRiskForecast <- lapply(seq(n, numberOfObservations - 1, by = q), function(end) {
+  garch.vine.roll@vines <- list()
+  prev_window_index <- -1
+  number_of_observations <- dt[ticker == tickers[[1]]] %>% nrow
+  value_at_risk_forecast <- data.table()
+  for (end in seq(n, number_of_observations - 1, by = q)) {
     start <- end - p + 1
-    curWindowIndex <- floor((end - n) / m) + 1
-    if(curWindowIndex != prevWindowIndex) {
+    cur_window_index <- floor((end - n) / m) + 1
+    if(cur_window_index != prev_window_index) {
       cat('\n')
-      cat("Window", curWindowIndex, ":")
-      prevWindowIndex <- curWindowIndex
+      cat("Window", cur_window_index, ":")
+      prev_window_index <- cur_window_index
     }
     cat('.')
-    residualsStart <- start - (curWindowIndex - 1) * m
-    residualsEnd <- end - (curWindowIndex - 1) * m
-    # cat("", "start: ", start, ", end:", end, "residualsStart:", residualsStart, "residualsEnd:", residualsEnd)
+    residuals_start <- start - (cur_window_index - 1) * m
+    residuals_end <- end - (cur_window_index - 1) * m
     uData <- lapply(tickers, function(.ticker) {
-      tickerResiduals <- residualsPerWindow[window_index == curWindowIndex &
+      ticker_residuals <- residuals_per_window[window_index == cur_window_index &
                                               ticker == .ticker] %>%
         .[order(date)] %>%
-        .[residualsStart:residualsEnd] %>%
+        .[residuals_start:residuals_end] %>%
         .[, .(u = getUData(z, "sstd", shape, skew))]
-      colnames(tickerResiduals) <- c(.ticker)
-      tickerResiduals
+      colnames(ticker_residuals) <- c(.ticker)
+      ticker_residuals
     }) %>% bind_cols()
 
     vine <- vinecop(data = uData, family_set = pairCopulaFamilies, presel = F)
 
-    garch_vine_roll@vines[[iter]] <- vine
+    garch.vine.roll@vines[[iter]] <- vine
     iter <- iter + 1
 
-    simulated.uData <- rvinecop(n = 100000, vinecop = vine) %>% as.data.table
-    simulated.xData <- lapply(tickers, function(.ticker) {
-      u <- simulated.uData[[.ticker]]
-      shape <- residualsPerWindow[window_index == curWindowIndex &
+    simulated_u_data <- rvinecop(n = 100000, vinecop = vine) %>% as.data.table
+    simulated_x_data <- lapply(tickers, function(.ticker) {
+      u <- simulated_u_data[[.ticker]]
+      shape <- residuals_per_window[window_index == cur_window_index &
                                     ticker == .ticker]$shape %>% unique
-      skew <- residualsPerWindow[window_index == curWindowIndex &
+      skew <- residuals_per_window[window_index == cur_window_index &
                                    ticker == .ticker]$skew %>% unique
       ans <- qdist(distribution = 'sstd', shape = shape, skew = skew, p = u) %>%
         as.data.table
       colnames(ans) <- c(.ticker)
       ans
     }) %>% bind_cols()
-    forecastStart <- residualsEnd + 1
-    forecastEnd <- forecastStart + q - 1
+
+    forecast_start <- residuals_end + 1
+    forecast_end <- forecast_start + q - 1
     # cat("", "forecastStart:", forecastStart, ", forecastEnd:", forecastEnd, "\n")
-    varForecasts <- lapply(forecastStart:forecastEnd, function(i) {
-      simulatedReturns <- lapply(tickers, function(.ticker) {
-        mu <- residualsPerWindow[window_index == curWindowIndex &
+    VaR_forecasts <- lapply(forecast_start:forecast_end, function(i) {
+      simulated_returns <- lapply(tickers, function(.ticker) {
+        mu <- residuals_per_window[window_index == cur_window_index &
                                    ticker == .ticker] %>%
           .[order(date)] %>% .[i, mu]
-        sigma <- residualsPerWindow[window_index == curWindowIndex &
+        sigma <- residuals_per_window[window_index == cur_window_index &
                                       ticker == .ticker] %>%
           .[order(date)] %>% .[i, sigma]
-        z <- simulated.xData[[.ticker]]
+        z <- simulated_x_data[[.ticker]]
         mu + sigma * z
       }) %>% as.data.table()
-      colnames(simulatedReturns) <- tickers
+      colnames(simulated_returns) <- tickers
 
-      weighted_simulated_returns <- as.data.table(t(t(as.matrix(simulatedReturns)) * weights))
+      weighted_simulated_returns <- as.data.table(t(t(as.matrix(simulated_returns)) * weights))
+      portfolio_returns <- rowSums(weighted_simulated_returns)
+      lapply(alpha, function(.alpha) {
+        col_dt <- data.table(tmp = quantile(portfolio_returns, .alpha))
+        colnames(col_dt) <- paste0("alpha_", .alpha)
+        col_dt
+      }) %>% bind_cols()
 
-
-      portfolioReturns <- rowSums(weighted_simulated_returns)
-      data.table(`5%` = quantile(portfolioReturns, 0.05),
-                 `7.5%` = quantile(portfolioReturns, 0.075),
-                 `10%` = quantile(portfolioReturns, 0.1))
     }) %>% rbindlist
-    forecastDates <- residualsPerWindow[window_index == curWindowIndex &
+
+    forecast_dates <- residuals_per_window[window_index == cur_window_index &
                                           ticker == tickers[1] & order(date)] %>%
-      .[forecastStart:forecastEnd, date]
-    varForecasts[, date := as.POSIXct(forecastDates)]
+      .[forecast_start:forecast_end, date]
+    VaR_forecasts[, date := as.POSIXct(forecast_dates)]
 
-    varForecasts <- merge(varForecasts, realized_portfolio_returns, by = 'date')
+    VaR_forecasts <- merge(VaR_forecasts, realized_portfolio_returns, by = 'date')
 
-    valueAtRiskForecast <- rbind(valueAtRiskForecast, varForecasts)
+    value_at_risk_forecast <- rbind(value_at_risk_forecast, VaR_forecasts)
   }
   cat('\n')
 
-  garch_vine_roll@VaR.forecast <- valueAtRiskForecast
-  garch_vine_roll
+  garch.vine.roll@VaR.forecast <- value_at_risk_forecast
+  garch.vine.roll
 }
 
 

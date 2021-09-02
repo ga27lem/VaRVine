@@ -11,7 +11,8 @@ garch_settings(train.size = 500, refit.every = 50, specs = list())
 
 \item{refit.every}{Determines every how many periods the garch models are re-estimated.}
 
-\item{specs}{A named list (stock ticker => \code{\link[rugarch:uGARCHspec-class]{rugarch::uGARCHspec}} class). If some of the tickers are left empty then a default spec will be assigned to that stock TODO link garch_vine_roll.}
+\item{specs}{A named list (stock ticker => \code{\link[rugarch:uGARCHspec-class]{rugarch::uGARCHspec}} class).
+If some of the tickers are left empty then a default spec will be assigned to that stock (see \link{garch_vine_roll})}
 }
 \description{
 Method for creating a GarchSettings object.

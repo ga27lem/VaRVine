@@ -58,6 +58,7 @@ setClass("GarchVineRoll",
            weights="numeric",
            garch.rolls="list",
            vines="list",
-           VaR.forecast="data.table"
+           VaR.forecast="data.table",
+           time.taken="difftime"
            ))
 

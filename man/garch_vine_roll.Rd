@@ -26,3 +26,42 @@ garch_vine_roll(
 \description{
 Method for rolling forecast for the Value-at-Risk of a portfolio of assets.
 }
+\details{
+This is method performs a rolling window based Value-at-Risk forecast of a portfolio of assets. We define 2 types of rolling windows. An outer GARCH rolling window
+which is defined using the garch.settings parameter (garch.settings@train.size, and garch.settings@refity.every), and an inner vine window, which is specified using the
+vine.settings parameter (vine.settings@train.size, and vine.settings@refity.every). In the outer window each portfolio component is fitted by an ARMA-GARCH model which
+whose specifications are specified by garch.settings@specs, where the number observations used for fitting are specified by garch.settings@train.size while the length
+of the window forecast is specified by
+garch.settings@refity.every. On the other hand, In the inner vine window, a vine copula model is fitted which captures the cross-sectional dependence of the different
+portfolio components. The number of observations used for fitting the vine model is specified by vine.settings@train.size, while the length of the vine window forecast
+is specified by vine.settings@refit.every.
+
+The garch.settings@specs parameter is a named list with keys being the stock identifiers and value being a \code{\link[rugarch:uGARCHspec-class]{rugarch::uGARCHspec}} object.
+The following default spec is used when no spec is provided for a certian stock. (see examples for more details).
+
+\code{ugarchspec (
+   variance.model = list(garchOrder = c(1, 1)),
+   mean.model = list(armaOrder = c(1, 1)),
+   distribution.model = "sstd"
+)}
+}
+\examples{
+library(rugarch)
+library(VaRVine)
+data("sample_returns")
+garch.specs <- list(
+ GOOG = ugarchspec (
+   variance.model = list(garchOrder = c(1, 1)),
+   mean.model = list(armaOrder = c(1, 1)),
+   distribution.model = "norm"),
+ AMZN = ugarchspec (
+   variance.model = list(garchOrder = c(1, 1)),
+   mean.model = list(armaOrder = c(1, 1)),
+   distribution.model = "sged")
+)
+garch.settings <- garch_settings(train.size = 750, refit.every = 50)
+vine.setttings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
+roll <- garch_vine_roll(sample_returns, garch.settings,
+                     vine.settings, alpha=0.05, weights=c(0.5, 0.2, 0.3))
+head(roll@VaR.forecast)
+}

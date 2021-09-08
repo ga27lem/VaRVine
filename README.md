@@ -1,20 +1,43 @@
 
 
 ### Installation
-The installation is best described through an example:
-* Assuming your R script is located in `/dir/my-script.R`
-* CLone the project into some directory `/another-dir/VaRVine`
-
-* Now, in your `/dir/my-script.R`, run the following to install the package:
 ```
-setwd(/another-dir)
 library(devtools)
-install("VaRVine")
-library(VaRVine)
+install_github("ga27lem/VaRVine")
 ```
-* Now, the package is loaded into your `/dir/my-script.R` and can be used.
 
 ### Usage
+#### List of methods
+Create a `GarchSettings` object:
+``` 
+garch_settings <- function(train.size=500, refit.every=50, specs=list())
+```
+
+Create a `VineSettings` object:
+
+```
+vine_settings <- function(train.size=250, refit.every=25, family.set='all')
+```
+
+Perform rolling window VaR forecast:
+
+```
+garch_vine_roll <- function(data = NULL, garch.settings = NULL, vine.settings = NULL, alpha = c(0.01, 0.05), weights=NULL)
+```
+
+Plot the foreasted Value-at-Risk:
+
+```
+VaR_plot <- function(garch.vine.roll = NULL, alpha = 0.05)
+```
+
+Backtest the VaR forecast:
+
+```
+backtest <- function(garch.vine.roll = NULL, alpha = 0.05)
+```
+
+#### Example
 ```
 library(VaRVine)
 library(rugarch)
@@ -31,7 +54,7 @@ garch.specs <- list(
     distribution.model = "sged")
 )
 garch.settings <- garch_settings(train.size = 750, refit.every = 50)
-vine.setttings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
+vine.settings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
 roll <- garch_vine_roll(sample_returns, garch.settings,
                       vine.settings, alpha=0.05, weights=c(0.5, 0.2, 0.3))
 head(roll@VaR.forecast)

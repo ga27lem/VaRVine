@@ -7,7 +7,7 @@
 garch_settings(train.size = 500, refit.every = 50, specs = list())
 }
 \arguments{
-\item{train.size}{The training indow size.}
+\item{train.size}{The training window size.}
 
 \item{refit.every}{Determines every how many periods the garch models are re-estimated.}
 

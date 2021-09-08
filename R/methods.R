@@ -2,7 +2,7 @@
 #' function: GARCH Models settings.
 #'
 #' Method for creating a GarchSettings object.
-#' @param train.size The training indow size.
+#' @param train.size The training window size.
 #' @param refit.every Determines every how many periods the garch models are re-estimated.
 #' @param specs A named list (stock ticker => \code{\link[rugarch:uGARCHspec-class]{rugarch::uGARCHspec}} class).
 #' If some of the tickers are left empty then a default spec will be assigned to that stock (see \link{garch_vine_roll})
@@ -30,7 +30,8 @@ vine_settings <- function(train.size=250, refit.every=25, family.set='all') {
 #' function: GARCH Vine Rolling Value-at-Risk Forecast and Backtesting.
 #'
 #' Method for rolling forecast for the Value-at-Risk of a portfolio of assets.
-#' @param data A matrix or data.frame where each column corresponds to the sorted log return series of a single stock. The row names are idially dates.
+#' @param data A data.frame or data.table where each column corresponds to the sorted log return series of a single stock. In addition,
+#' A column with name `date` is expected that contains the date of each row.
 #' @param garch.settings A \code{\linkS4class{GarchSettings}} object specifying the settings for the ARMA-GARCH models.
 #' @param vine.settings A \code{\linkS4class{VineSettings}} object specifying the settings for the vine copula model.
 #' @param alpha The Value-at-Risk level to calculate.
@@ -77,7 +78,7 @@ vine_settings <- function(train.size=250, refit.every=25, family.set='all') {
 #'    distribution.model = "sged")
 #' )
 #' garch.settings <- garch_settings(train.size = 750, refit.every = 50)
-#' vine.setttings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
+#' vine.settings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
 #' roll <- garch_vine_roll(sample_returns, garch.settings,
 #'                      vine.settings, alpha=0.05, weights=c(0.5, 0.2, 0.3))
 #' head(roll@VaR.forecast)
@@ -160,7 +161,7 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
   q <- vine.settings@refit.every
   pairCopulaFamilies <- vine.settings@family.set
 
-  dt <- data %>% as.data.table(keep.rownames = 'date') %>% melt(id.vars = c('date'), variable.name = 'ticker', value.name = 'ret.closing.prices')
+  dt <- data %>% as.data.table() %>% melt(id.vars = c('date'), variable.name = 'ticker', value.name = 'ret.closing.prices')
 
 
   garch.vine.roll <- new("GarchVineRoll")
@@ -176,8 +177,8 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
   garch.settings@specs <- .initialize_specs(tickers, garch.settings@specs)
   garch.vine.roll@garch.settings <- garch.settings
 
-  realized_portfolio_returns <- data.table(date = as.POSIXct(rownames(data)),
-                                           realized = rowSums(as.data.table(t(t(as.matrix(data)) * weights))))
+  realized_portfolio_returns <- data.table(date = as.POSIXct(data$date),
+                                           realized = rowSums(as.data.table(t(t(as.matrix(data[, names(data) != "date"])) * weights))))
 
   colnames(dt) <- c("ref.date", "ticker", "ret.closing.prices")
   cat("Fitting garch models ")

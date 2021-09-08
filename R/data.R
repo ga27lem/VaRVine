@@ -10,7 +10,8 @@
 #'
 #' @usage data(sample_returns)
 #'
-#' @format data.frame with 3 columns and 1000 rows, where the row names represent the dates.
+#' @format data.frame with 4 columns and 1000 rows, the first column `date` represents the daily dates while the other 3 columns (`GOOG`, `AAPL`, `AMZN`) represent
+#' the daily log return of the 3 stocks.
 #'
 #' @keywords datasets
 #'

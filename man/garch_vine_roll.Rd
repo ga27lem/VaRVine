@@ -13,7 +13,8 @@ garch_vine_roll(
 )
 }
 \arguments{
-\item{data}{A matrix or data.frame where each column corresponds to the sorted log return series of a single stock. The row names are idially dates.}
+\item{data}{A data.frame or data.table where each column corresponds to the sorted log return series of a single stock. In addition,
+A column with name `date` is expected that contains the date of each row.}
 
 \item{garch.settings}{A \code{\linkS4class{GarchSettings}} object specifying the settings for the ARMA-GARCH models.}
 
@@ -60,7 +61,7 @@ garch.specs <- list(
    distribution.model = "sged")
 )
 garch.settings <- garch_settings(train.size = 750, refit.every = 50)
-vine.setttings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
+vine.settings <- vine_settings(train.size = 250, refit.every = 25, family.set = 'all')
 roll <- garch_vine_roll(sample_returns, garch.settings,
                      vine.settings, alpha=0.05, weights=c(0.5, 0.2, 0.3))
 head(roll@VaR.forecast)

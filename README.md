@@ -4,6 +4,8 @@
 ```
 library(devtools)
 install_github("ga27lem/VaRVine")
+
+library(VaRVine)
 ```
 
 ### Usage

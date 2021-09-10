@@ -155,6 +155,8 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
 
   start.time <- Sys.time()
 
+  number_of_observations <- nrow(data)
+
   n <- garch.settings@train.size
   m <- garch.settings@refit.every
   p <- vine.settings@train.size
@@ -215,9 +217,9 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
       names(r) <- dt[ticker == .ticker & order(ref.date)]$ref.date
       start <- (i - 1) * m + 1
       # train on n, forecast m
-      end <- start + (n - 1) + m
+      end <- min(start + (n - 1) + m, number_of_observations)
       r <- r[start:end]
-      mod <- ugarchfilter(spec, data = r, out.sample = m)
+      mod <- ugarchfilter(spec, data = r, out.sample = end - start - n + 1)
       fitted_residuals <- residuals(mod, standardize = T) %>% as.data.table
       colnames(fitted_residuals) <- c('date', 'z')
       fitted_residuals[, Mu := NA]
@@ -227,7 +229,7 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
       fitted_residuals[, Shape := shape]
       fitted_residuals[, Skew := skew]
       forecast_start <- start
-      forecast_end <- start + m - 1
+      forecast_end <- min(start + m - 1, nrow(garch_forecasts[[.ticker]]))
       forecasted_residuals <- garch_forecasts[[.ticker]] %>%
         .[forecast_start:forecast_end] %>%
         .[, .(date = as.POSIXct(date),
@@ -244,19 +246,26 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
   iter <- 1
   garch.vine.roll@vines <- list()
   prev_window_index <- -1
-  number_of_observations <- dt[ticker == tickers[[1]]] %>% nrow
+  iter_per_window <- 0
   value_at_risk_forecast <- data.table()
-  for (end in seq(n, number_of_observations - 1, by = q)) {
+  end <- n
+  while(end < number_of_observations) {
+  # for (end in seq(n, number_of_observations - 1, by = q)) {
     start <- end - p + 1
+    # cat("start: ", start, "end: ", end, "\n")
     cur_window_index <- floor((end - n) / m) + 1
     if(cur_window_index != prev_window_index) {
       cat('\n')
       cat("Window", cur_window_index, ":")
       prev_window_index <- cur_window_index
+      iter_per_window <- 0
     }
     cat('.')
     residuals_start <- start - (cur_window_index - 1) * m
     residuals_end <- end - (cur_window_index - 1) * m
+    # cat("residuals_start: ", residuals_start, "residuals_end: ", residuals_end, "\n")
+
+
     u_data <- lapply(tickers, function(.ticker) {
       dist.model <- garch_rolls[[.ticker]]@model$spec@model$modeldesc$distribution
 
@@ -272,7 +281,7 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
     vine <- vinecop(data = u_data, family_set = pairCopulaFamilies, presel = F)
 
     garch.vine.roll@vines[[iter]] <- vine
-    iter <- iter + 1
+
 
     simulated_u_data <- rvinecop(n = 100000, vinecop = vine) %>% as.data.table
     simulated_x_data <- lapply(tickers, function(.ticker) {
@@ -291,7 +300,11 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
     }) %>% bind_cols()
 
     forecast_start <- residuals_end + 1
-    forecast_end <- forecast_start + q - 1
+    forecast_end <- min(forecast_start + q - 1, nrow(residuals_per_window[window_index == cur_window_index & ticker == tickers[1]]))
+
+    # cat("forecast_start: ", forecast_start, "forecast_end: ", forecast_end, "\n")
+
+
     VaR_forecasts <- lapply(forecast_start:forecast_end, function(i) {
       simulated_returns <- lapply(tickers, function(.ticker) {
         mu <- residuals_per_window[window_index == cur_window_index &
@@ -323,6 +336,9 @@ backtest <- function(garch.vine.roll = NULL, alpha = 0.05) {
     VaR_forecasts <- merge(VaR_forecasts, realized_portfolio_returns, by = 'date')
 
     value_at_risk_forecast <- rbind(value_at_risk_forecast, VaR_forecasts)
+    end <- min(end + q, end - iter_per_window * q + m)
+    iter <- iter + 1
+    iter_per_window <- iter_per_window + 1
   }
   cat('\n')
 

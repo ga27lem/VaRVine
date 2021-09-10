@@ -62,3 +62,27 @@ setClass("GarchVineRoll",
            time.taken="difftime"
            ))
 
+
+setMethod("show",
+          "GarchVineRoll",
+          function(object) {
+            cat(paste("\n*=================================*", sep = ""))
+            cat(paste("\n*         GARCH settings          *", sep = ""))
+            cat(paste("\n*=================================*", sep = ""), "\n")
+            cat("Train size: ", object@garch.settings@train.size, "\n")
+            cat("Refit every: ", object@garch.settings@refit.every, "\n")
+            cat("Number of GARCH rolling windows: ", length(object@garch.rolls), "\n")
+
+            cat(paste("\n*=================================*", sep = ""))
+            cat(paste("\n*         Vine settings          *", sep = ""))
+            cat(paste("\n*=================================*", sep = ""), "\n")
+            cat("Train size: ", object@vine.settings@train.size, "\n")
+            cat("Refit every: ", object@vine.settings@refit.every, "\n")
+            cat("Family set: ", object@vine.settings@family.set, "\n")
+            cat("Number of vine rolling windows: ", length(object@vines), "\n")
+            cat("\n")
+
+
+            cat("Time taken: ", object@time.taken, "\n")
+          }
+)
